@@ -75,11 +75,15 @@ public class RedisClientTest {
     @Test
     public void testConnectAsync() throws InterruptedException {
         RFuture<RedisConnection> f = redisClient.connectAsync();
-        final CountDownLatch l = new CountDownLatch(1);
-        f.addListener((FutureListener<RedisConnection>) future -> {
-            RedisConnection conn = future.get();
+        CountDownLatch l = new CountDownLatch(2);
+        f.onComplete((conn, e) -> {
             assertThat(conn.sync(RedisCommands.PING)).isEqualTo("PONG");
             l.countDown();
+        });
+        f.handle((conn, ex) -> {
+            assertThat(conn.sync(RedisCommands.PING)).isEqualTo("PONG");
+            l.countDown();
+            return null; 
         });
         assertThat(l.await(10, TimeUnit.SECONDS)).isTrue();
     }
@@ -149,7 +153,7 @@ public class RedisClientTest {
         commands.add(cmd4);
 
         RPromise<Void> p = new RedissonPromise<Void>();
-        conn.send(new CommandsData(p, commands, false));
+        conn.send(new CommandsData(p, commands, false, false));
 
         assertThat(cmd1.getPromise().get()).isEqualTo("PONG");
         assertThat(cmd2.getPromise().get()).isEqualTo(1);
@@ -184,7 +188,7 @@ public class RedisClientTest {
         }
 
         RPromise<Void> p = new RedissonPromise<Void>();
-        conn.send(new CommandsData(p, commands, false));
+        conn.send(new CommandsData(p, commands, false, false));
 
         for (CommandData<?, ?> commandData : commands) {
             commandData.getPromise().get();

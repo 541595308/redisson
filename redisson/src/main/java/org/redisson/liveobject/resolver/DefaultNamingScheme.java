@@ -1,5 +1,5 @@
 /**
- * Copyright 2018 Nikita Koksharov
+ * Copyright (c) 2013-2020 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,23 +19,25 @@ import java.io.IOException;
 
 import org.redisson.client.codec.Codec;
 import org.redisson.client.handler.State;
-import org.redisson.codec.JsonJacksonCodec;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 
 /**
  *
  * @author Rui Gu (https://github.com/jackygurui)
+ * @author Nikita Koksharov
  */
 public class DefaultNamingScheme extends AbstractNamingScheme implements NamingScheme {
 
-    public static final DefaultNamingScheme INSTANCE = new DefaultNamingScheme(new JsonJacksonCodec());
-
     public DefaultNamingScheme(Codec codec) {
         super(codec);
+    }
+
+    @Override
+    public String getNamePattern(Class<?> entityClass, Class<?> idFieldClass, String idFieldName) {
+        return "redisson_live_object:{" + "*" + "}:" + entityClass.getName() + ":" + idFieldName + ":" + idFieldClass.getName();
     }
 
     @Override
@@ -59,23 +61,12 @@ public class DefaultNamingScheme extends AbstractNamingScheme implements NamingS
     }
 
     @Override
-    public String resolveClassName(String name) {
-        return name.substring(name.lastIndexOf("}:") + 2, name.indexOf(":"));
-    }
-
-    @Override
-    public String resolveIdFieldName(String name) {
-        String s = name.substring(0, name.lastIndexOf(":"));
-        return s.substring(s.lastIndexOf(":") + 1);
-    }
-
-    @Override
     public Object resolveId(String name) {
         String decode = name.substring(name.indexOf("{") + 1, name.indexOf("}"));
         
         ByteBuf b = Unpooled.wrappedBuffer(ByteBufUtil.decodeHexDump(decode)); 
         try {
-            return codec.getMapKeyDecoder().decode(b, new State(false));
+            return codec.getMapKeyDecoder().decode(b, new State());
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to decode [" + decode + "] into object", ex);
         } finally {
@@ -89,6 +80,11 @@ public class DefaultNamingScheme extends AbstractNamingScheme implements NamingS
         } finally {
             bytes.release();
         }
+    }
+
+    @Override
+    public String getIndexName(Class<?> entityClass, String fieldName) {
+        return "redisson_live_object_index:{" + entityClass.getName() + "}:" + fieldName;
     }
 
 }

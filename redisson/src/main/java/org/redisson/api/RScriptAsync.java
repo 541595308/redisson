@@ -1,5 +1,5 @@
 /**
- * Copyright 2018 Nikita Koksharov
+ * Copyright (c) 2013-2020 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,11 +15,10 @@
  */
 package org.redisson.api;
 
-import java.util.List;
-
 import org.redisson.api.RScript.Mode;
 import org.redisson.api.RScript.ReturnType;
-import org.redisson.client.codec.Codec;
+
+import java.util.List;
 
 /**
  * Async interface for Redis Script feature
@@ -49,12 +48,6 @@ public interface RScriptAsync {
      */
     <R> RFuture<R> evalShaAsync(Mode mode, String shaDigest, ReturnType returnType, List<Object> keys, Object... values);
     
-    /*
-     * Use getScript(Codec) instead
-     */
-    @Deprecated
-    <R> RFuture<R> evalShaAsync(Mode mode, Codec codec, String shaDigest, ReturnType returnType, List<Object> keys, Object... values);
-
     /**
      * Executes Lua script stored in Redis scripts cache by SHA-1 digest
      * 
@@ -69,12 +62,6 @@ public interface RScriptAsync {
      */
     <R> RFuture<R> evalShaAsync(String key, Mode mode, String shaDigest, ReturnType returnType, List<Object> keys, Object... values);
     
-    /*
-     * Use getScript(Codec) instead
-     */
-    @Deprecated
-    <R> RFuture<R> evalShaAsync(String key, Mode mode, Codec codec, String shaDigest, ReturnType returnType, List<Object> keys, Object... values);
-
     /**
      * Executes Lua script stored in Redis scripts cache by SHA-1 digest
      * 
@@ -85,12 +72,6 @@ public interface RScriptAsync {
      * @return result object
      */
     <R> RFuture<R> evalShaAsync(Mode mode, String shaDigest, ReturnType returnType);
-    
-    /*
-     * Use getScript(Codec) instead
-     */
-    @Deprecated
-    <R> RFuture<R> evalShaAsync(Mode mode, Codec codec, String shaDigest, ReturnType returnType);
 
     /**
      * Executes Lua script
@@ -104,18 +85,6 @@ public interface RScriptAsync {
      * @return result object
      */
     <R> RFuture<R> evalAsync(Mode mode, String luaScript, ReturnType returnType, List<Object> keys, Object... values);
-    
-    /*
-     * Use getScript(Codec) instead
-     */
-    @Deprecated
-    <R> RFuture<R> evalAsync(Mode mode, Codec codec, String luaScript, ReturnType returnType, List<Object> keys, Object... values);
-
-    /*
-     * Use getScript(Codec) instead
-     */
-    @Deprecated
-    <R> RFuture<R> evalAsync(String key, Mode mode, Codec codec, String luaScript, ReturnType returnType, List<Object> keys, Object... values);
 
     /**
      * Executes Lua script
@@ -142,12 +111,6 @@ public interface RScriptAsync {
      */
     <R> RFuture<R> evalAsync(Mode mode, String luaScript, ReturnType returnType);
 
-    /*
-     * Use getScript(Codec) instead
-     */
-    @Deprecated
-    <R> RFuture<R> evalAsync(Mode mode, Codec codec, String luaScript, ReturnType returnType);
-
     /**
      * Loads Lua script into Redis scripts cache and returns its SHA-1 digest
      * 
@@ -171,7 +134,7 @@ public interface RScriptAsync {
      * @param shaDigests - collection of SHA-1 digests
      * @return list of booleans corresponding to collection SHA-1 digests
      */
-    RFuture<List<Boolean>> scriptExistsAsync(String ... shaDigests);
+    RFuture<List<Boolean>> scriptExistsAsync(String... shaDigests);
 
     /**
      * Checks for presence Lua scripts in Redis script cache by SHA-1 digest.
@@ -180,7 +143,7 @@ public interface RScriptAsync {
      * @param shaDigests - collection of SHA-1 digests
      * @return list of booleans corresponding to collection SHA-1 digests
      */
-    RFuture<List<Boolean>> scriptExistsAsync(String key, String ... shaDigests);
+    RFuture<List<Boolean>> scriptExistsAsync(String key, String... shaDigests);
 
     /**
      * Kills currently executed Lua script

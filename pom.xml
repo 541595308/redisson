@@ -3,24 +3,24 @@
 
     <groupId>org.redisson</groupId>
     <artifactId>redisson-parent</artifactId>
-    <version>2.14.2-SNAPSHOT</version>
+    <version>3.13.1-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Redisson</name>
-    <description>Redis based In-Memory Data Grid for Java</description>
+    <description>Redis Java client with features of In-Memory Data Grid</description>
     <inceptionYear>2014</inceptionYear>
     <url>http://redisson.org</url>
 
     <organization>
-       <name>The Redisson Project</name>
-       <url>http://redisson.org/</url>
+       <name>Redisson</name>
+       <url>https://redisson.org/</url>
     </organization>
 
     <properties>
         <maven.test.skip>true</maven.test.skip>
-        <source.version>1.6</source.version>
+        <source.version>1.8</source.version>
         <test.source.version>1.8</test.source.version>
-        <release.version>6</release.version>
+        <release.version>8</release.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -47,9 +47,8 @@
         <developer>
             <id>mrniko</id>
             <name>Nikita Koksharov</name>
-            <email>nkoksharov@redisson.org</email>
             <roles>
-                <role>Architect</role>
+                <role>Founder</role>
                 <role>Developer</role>
             </roles>
             <timezone>+4</timezone>
@@ -62,6 +61,7 @@
         <module>redisson-tomcat</module>
         <module>redisson-spring-data</module>
         <module>redisson-spring-boot-starter</module>
+        <module>redisson-mybatis</module>
         <module>redisson-hibernate</module>
     </modules>
 
@@ -132,7 +132,14 @@
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-bom</artifactId>
-                <version>4.1.31.Final</version>
+                <version>4.1.50.Final</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>2.10.4</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -148,6 +155,22 @@
       <testSourceDirectory>${basedir}/src/test/java</testSourceDirectory>
 
         <plugins>	
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.1.2</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                            <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
+                        </manifest>
+                        <manifestEntries>
+                            <Build-Time>${maven.build.timestamp}</Build-Time>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
 
        	<plugin>
        		<groupId>org.sonatype.plugins</groupId>
@@ -224,7 +247,9 @@
                 <configuration>
                     <source>${source.version}</source>
                     <target>${source.version}</target>
+<!--
                     <release>${release.version}</release>
+-->
                     <optimize>true</optimize>
                     <showDeprecations>true</showDeprecations>
                 </configuration>

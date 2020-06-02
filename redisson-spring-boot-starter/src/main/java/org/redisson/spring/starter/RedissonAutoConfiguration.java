@@ -1,5 +1,5 @@
 /**
- * Copyright 2018 Nikita Koksharov
+ * Copyright (c) 2013-2020 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,6 +47,7 @@ import org.springframework.util.ReflectionUtils;
 /**
  * 
  * @author Nikita Koksharov
+ * @author Nikos Kakavas (https://github.com/nikakis)
  *
  */
 @Configuration
@@ -54,6 +55,9 @@ import org.springframework.util.ReflectionUtils;
 @AutoConfigureBefore(RedisAutoConfiguration.class)
 @EnableConfigurationProperties({RedissonProperties.class, RedisProperties.class})
 public class RedissonAutoConfiguration {
+
+    @Autowired(required = false)
+    private List<RedissonAutoConfigurationCustomizer> redissonAutoConfigurationCustomizers;
 
     @Autowired
     private RedissonProperties redissonProperties;
@@ -95,7 +99,7 @@ public class RedissonAutoConfiguration {
         Object timeoutValue = ReflectionUtils.invokeMethod(timeoutMethod, redisProperties);
         int timeout;
         if(null == timeoutValue){
-            timeout = 0;
+            timeout = 10000;
         }else if (!(timeoutValue instanceof Integer)) {
             Method millisMethod = ReflectionUtils.findMethod(timeoutValue.getClass(), "toMillis");
             timeout = ((Long) ReflectionUtils.invokeMethod(millisMethod, timeoutValue)).intValue();
@@ -160,7 +164,11 @@ public class RedissonAutoConfiguration {
                 .setDatabase(redisProperties.getDatabase())
                 .setPassword(redisProperties.getPassword());
         }
-        
+        if (redissonAutoConfigurationCustomizers != null) {
+            for (RedissonAutoConfigurationCustomizer customizer : redissonAutoConfigurationCustomizers) {
+                customizer.customize(config);
+            }
+        }
         return Redisson.create(config);
     }
 

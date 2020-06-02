@@ -1,5 +1,5 @@
 /**
- * Copyright 2018 Nikita Koksharov
+ * Copyright (c) 2013-2020 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import org.redisson.RedissonKeys;
 import org.redisson.RedissonLock;
 import org.redisson.api.RKeys;
 import org.redisson.command.CommandAsyncExecutor;
+import org.redisson.transaction.RedissonTransactionalLock;
 
 /**
  * 
@@ -28,14 +29,18 @@ import org.redisson.command.CommandAsyncExecutor;
 public class DeleteOperation extends TransactionalOperation {
 
     private String lockName;
+    private String transactionId;
+    private long threadId;
     
     public DeleteOperation(String name) {
-        this(name, null);
+        this(name, null, null, 0);
     }
     
-    public DeleteOperation(String name, String lockName) {
+    public DeleteOperation(String name, String lockName, String transactionId, long threadId) {
         super(name, null);
         this.lockName = lockName;
+        this.transactionId = transactionId;
+        this.threadId = threadId;
     }
 
     @Override
@@ -43,7 +48,7 @@ public class DeleteOperation extends TransactionalOperation {
         RKeys keys = new RedissonKeys(commandExecutor);
         keys.deleteAsync(getName());
         if (lockName != null) {
-            RedissonLock lock = new RedissonLock(commandExecutor, lockName);
+            RedissonLock lock = new RedissonTransactionalLock(commandExecutor, lockName, transactionId);
             lock.unlockAsync();
         }
     }
@@ -51,7 +56,7 @@ public class DeleteOperation extends TransactionalOperation {
     @Override
     public void rollback(CommandAsyncExecutor commandExecutor) {
         if (lockName != null) {
-            RedissonLock lock = new RedissonLock(commandExecutor, lockName);
+            RedissonLock lock = new RedissonTransactionalLock(commandExecutor, lockName, transactionId);
             lock.unlockAsync();
         }
     }

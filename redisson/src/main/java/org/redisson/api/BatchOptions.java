@@ -1,5 +1,5 @@
 /**
- * Copyright 2018 Nikita Koksharov
+ * Copyright (c) 2013-2020 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,12 +18,12 @@ package org.redisson.api;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Configuration for Batch objecct.
+ * Configuration for Batch object.
  * 
  * @author Nikita Koksharov
  *
  */
-public class BatchOptions {
+public final class BatchOptions {
     
     public enum ExecutionMode {
 
@@ -159,16 +159,6 @@ public class BatchOptions {
     }
     public int getSyncSlaves() {
         return syncSlaves;
-    }
-    
-    /**
-     * Use {@link #executionMode(ExecutionMode)} setting instead
-     * 
-     */
-    @Deprecated
-    public BatchOptions atomic() {
-        executionMode = ExecutionMode.IN_MEMORY_ATOMIC;
-        return this;
     }
     
     /**

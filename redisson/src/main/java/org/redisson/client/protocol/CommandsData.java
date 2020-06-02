@@ -1,5 +1,5 @@
 /**
- * Copyright 2018 Nikita Koksharov
+ * Copyright (c) 2013-2020 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,21 +33,18 @@ public class CommandsData implements QueueCommand {
     private final boolean skipResult;
     private final boolean atomic;
     private final boolean queued;
+    private final boolean syncSlaves;
 
-    public CommandsData(RPromise<Void> promise, List<CommandData<?, ?>> commands, boolean queued) {
-        this(promise, commands, null, false, false, queued);
+    public CommandsData(RPromise<Void> promise, List<CommandData<?, ?>> commands, boolean queued, boolean syncSlaves) {
+        this(promise, commands, null, false, false, queued, syncSlaves);
     }
     
-    public CommandsData(RPromise<Void> promise, List<CommandData<?, ?>> commands, List<CommandData<?, ?>> attachedCommands) {
-        this(promise, commands, attachedCommands, false, false, true);
-    }
-    
-    public CommandsData(RPromise<Void> promise, List<CommandData<?, ?>> commands, boolean skipResult, boolean atomic, boolean queued) {
-        this(promise, commands, null, skipResult, atomic, queued);
+    public CommandsData(RPromise<Void> promise, List<CommandData<?, ?>> commands, boolean skipResult, boolean atomic, boolean queued, boolean syncSlaves) {
+        this(promise, commands, null, skipResult, atomic, queued, syncSlaves);
     }
     
     public CommandsData(RPromise<Void> promise, List<CommandData<?, ?>> commands, List<CommandData<?, ?>> attachedCommands, 
-            boolean skipResult, boolean atomic, boolean queued) {
+            boolean skipResult, boolean atomic, boolean queued, boolean syncSlaves) {
         super();
         this.promise = promise;
         this.commands = commands;
@@ -55,6 +52,11 @@ public class CommandsData implements QueueCommand {
         this.atomic = atomic;
         this.attachedCommands = attachedCommands;
         this.queued = queued;
+        this.syncSlaves = syncSlaves;
+    }
+
+    public boolean isSyncSlaves() {
+        return syncSlaves;
     }
 
     public RPromise<Void> getPromise() {
@@ -85,8 +87,8 @@ public class CommandsData implements QueueCommand {
     public List<CommandData<Object, Object>> getPubSubOperations() {
         List<CommandData<Object, Object>> result = new ArrayList<CommandData<Object, Object>>();
         for (CommandData<?, ?> commandData : commands) {
-            if (RedisCommands.PUBSUB_COMMANDS.equals(commandData.getCommand().getName())) {
-                result.add((CommandData<Object, Object>)commandData);
+            if (RedisCommands.PUBSUB_COMMANDS.contains(commandData.getCommand().getName())) {
+                result.add((CommandData<Object, Object>) commandData);
             }
         }
         return result;

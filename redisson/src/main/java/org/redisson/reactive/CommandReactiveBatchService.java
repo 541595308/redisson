@@ -1,5 +1,5 @@
 /**
- * Copyright 2018 Nikita Koksharov
+ * Copyright (c) 2013-2020 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,16 +15,12 @@
  */
 package org.redisson.reactive;
 
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Callable;
 
-import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscription;
 import org.redisson.api.BatchOptions;
 import org.redisson.api.BatchResult;
 import org.redisson.api.RFuture;
 import org.redisson.api.RedissonReactiveClient;
-import org.redisson.client.RedisConnection;
 import org.redisson.client.codec.Codec;
 import org.redisson.client.protocol.RedisCommand;
 import org.redisson.command.CommandAsyncExecutor;
@@ -33,8 +29,7 @@ import org.redisson.connection.ConnectionManager;
 import org.redisson.connection.NodeSource;
 import org.redisson.misc.RPromise;
 
-import reactor.fn.Supplier;
-import reactor.rx.action.support.DefaultSubscriber;
+import reactor.core.publisher.Mono;
 
 /**
  * 
@@ -44,41 +39,45 @@ import reactor.rx.action.support.DefaultSubscriber;
 public class CommandReactiveBatchService extends CommandReactiveService {
 
     private final CommandBatchService batchService;
-    private final Queue<Publisher<?>> publishers = new ConcurrentLinkedQueue<Publisher<?>>();
 
-    public CommandReactiveBatchService(ConnectionManager connectionManager) {
+    public CommandReactiveBatchService(ConnectionManager connectionManager, BatchOptions options) {
         super(connectionManager);
-        batchService = new CommandBatchService(connectionManager);
+        batchService = new CommandBatchService(connectionManager, options);
     }
 
     @Override
-    public <R> Publisher<R> reactive(Supplier<RFuture<R>> supplier) {
-        NettyFuturePublisher<R> publisher = new NettyFuturePublisher<R>(supplier);
-        publishers.add(publisher);
-        return publisher;
+    public <R> Mono<R> reactive(Callable<RFuture<R>> supplier) {
+        Mono<R> mono = super.reactive(new Callable<RFuture<R>>() {
+            volatile RFuture<R> future;
+            @Override
+            public RFuture<R> call() throws Exception {
+                if (future == null) {
+                    synchronized (this) {
+                        if (future == null) {
+                            future = supplier.call();
+                        }
+                    }
+                }
+                return future;
+            }
+        });
+        mono.subscribe();
+        return mono;
     }
     
-    public <R> Publisher<R> superReactive(Supplier<RFuture<R>> supplier) {
-        return super.reactive(supplier);
+    @Override
+    protected <R> RPromise<R> createPromise() {
+        return batchService.createPromise();
     }
     
     @Override
     public <V, R> void async(boolean readOnlyMode, NodeSource nodeSource,
-            Codec codec, RedisCommand<V> command, Object[] params, RPromise<R> mainPromise, int attempt, boolean ignoreRedirect, RFuture<RedisConnection> connFuture) {
-        batchService.async(readOnlyMode, nodeSource, codec, command, params, mainPromise, attempt, ignoreRedirect, connFuture);
+            Codec codec, RedisCommand<V> command, Object[] params, RPromise<R> mainPromise, boolean ignoreRedirect) {
+        batchService.async(readOnlyMode, nodeSource, codec, command, params, mainPromise, ignoreRedirect);
     }
 
-    public RFuture<BatchResult<?>> executeAsync(BatchOptions options) {
-        for (Publisher<?> publisher : publishers) {
-            publisher.subscribe(new DefaultSubscriber<Object>() {
-                @Override
-                public void onSubscribe(Subscription s) {
-                    s.request(1);
-                }
-            });
-        }
-
-        return batchService.executeAsync(options);
+    public RFuture<BatchResult<?>> executeAsync() {
+        return batchService.executeAsync();
     }
 
     @Override

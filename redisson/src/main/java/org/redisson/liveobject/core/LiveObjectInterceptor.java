@@ -1,5 +1,5 @@
 /**
- * Copyright 2018 Nikita Koksharov
+ * Copyright (c) 2013-2020 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,27 +15,24 @@
  */
 package org.redisson.liveobject.core;
 
-import java.lang.reflect.Method;
-import net.bytebuddy.implementation.bind.annotation.AllArguments;
-import net.bytebuddy.implementation.bind.annotation.FieldProxy;
-import net.bytebuddy.implementation.bind.annotation.FieldValue;
-import net.bytebuddy.implementation.bind.annotation.Origin;
-import net.bytebuddy.implementation.bind.annotation.RuntimeType;
-import net.bytebuddy.implementation.bind.annotation.This;
-
+import net.bytebuddy.implementation.bind.annotation.*;
+import org.redisson.RedissonLiveObjectService;
 import org.redisson.RedissonMap;
-import org.redisson.client.RedisException;
-import org.redisson.client.codec.Codec;
+import org.redisson.api.RFuture;
 import org.redisson.api.RMap;
-import org.redisson.api.RedissonClient;
-import org.redisson.api.annotation.REntity;
-import org.redisson.codec.ReferenceCodecProvider;
+import org.redisson.client.RedisException;
+import org.redisson.command.CommandAsyncExecutor;
+import org.redisson.command.CommandBatchService;
+import org.redisson.connection.ConnectionManager;
 import org.redisson.liveobject.misc.ClassUtils;
 import org.redisson.liveobject.resolver.NamingScheme;
+
+import java.lang.reflect.Method;
 
 /**
  *
  * @author Rui Gu (https://github.com/jackygurui)
+ * @author Nikita Koksharov
  */
 public class LiveObjectInterceptor {
 
@@ -49,23 +46,25 @@ public class LiveObjectInterceptor {
         void setValue(Object value);
     }
 
-    private final RedissonClient redisson;
-    private final ReferenceCodecProvider codecProvider;
+    private final CommandAsyncExecutor commandExecutor;
+    private final ConnectionManager connectionManager;
     private final Class<?> originalClass;
     private final String idFieldName;
     private final Class<?> idFieldType;
     private final NamingScheme namingScheme;
-    private final Class<? extends Codec> codecClass;
+    private final RedissonLiveObjectService service;
 
-    public LiveObjectInterceptor(RedissonClient redisson, Class<?> entityClass, String idFieldName) {
-        this.redisson = redisson;
-        this.codecProvider = redisson.getConfig().getReferenceCodecProvider();
+    public LiveObjectInterceptor(CommandAsyncExecutor commandExecutor, ConnectionManager connectionManager,
+                                 RedissonLiveObjectService service, Class<?> entityClass, String idFieldName) {
+        this.service = service;
+        this.commandExecutor = commandExecutor;
+        this.connectionManager = connectionManager;
         this.originalClass = entityClass;
         this.idFieldName = idFieldName;
-        REntity anno = (REntity) ClassUtils.getAnnotation(entityClass, REntity.class);
-        this.codecClass = anno.codec();
+
+        namingScheme = connectionManager.getCommandExecutor().getObjectBuilder().getNamingScheme(entityClass);
+
         try {
-            this.namingScheme = anno.namingScheme().getDeclaredConstructor(Codec.class).newInstance(codecProvider.getCodec(anno, originalClass));
             this.idFieldType = ClassUtils.getDeclaredField(originalClass, idFieldName).getType();
         } catch (Exception e) {
             throw new IllegalArgumentException(e);
@@ -80,7 +79,7 @@ public class LiveObjectInterceptor {
             @FieldValue("liveObjectId") Object id,
             @FieldProxy("liveObjectId") Setter idSetter,
             @FieldProxy("liveObjectId") Getter idGetter,
-            @FieldValue("liveObjectLiveMap") RMap<?, ?> map,
+            @FieldValue("liveObjectLiveMap") RMap<String, ?> map,
             @FieldProxy("liveObjectLiveMap") Setter mapSetter,
             @FieldProxy("liveObjectLiveMap") Getter mapGetter
     ) throws Exception {
@@ -103,8 +102,9 @@ public class LiveObjectInterceptor {
                     //key may already renamed by others.
                 }
             }
-            RMap<Object, Object> liveMap = redisson.getMap(idKey,
-                    codecProvider.getCodec(codecClass, RedissonMap.class, idKey));
+
+            RMap<Object, Object> liveMap = new RedissonMap<Object, Object>(namingScheme.getCodec(), commandExecutor,
+                                                    idKey, null, null, null);
             mapSetter.setValue(liveMap);
 
             return null;
@@ -117,20 +117,23 @@ public class LiveObjectInterceptor {
             return namingScheme.resolveId(map.getName());
         }
 
-        if ("getLiveObjectLiveMap".equals(method.getName())) {
-            return map;
-        }
-
-        if ("isExists".equals(method.getName())) {
-            return map.isExists();
-        }
-        
         if ("delete".equals(method.getName())) {
-            return map.delete();
+            CommandBatchService ce;
+            if (commandExecutor instanceof CommandBatchService) {
+                ce = (CommandBatchService) commandExecutor;
+            } else {
+                ce = new CommandBatchService(connectionManager);
+            }
+
+            RFuture<Long> deleteFuture = service.delete(me, map, ce);
+            ce.execute();
+            
+            return deleteFuture.getNow() > 0;
         }
 
-        throw new NoSuchMethodException();
+        return method.invoke(map, args);
     }
+
 
     private String getMapKey(Object id) {
         return namingScheme.getName(originalClass, idFieldType, idFieldName, id);

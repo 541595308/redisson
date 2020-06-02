@@ -1,5 +1,5 @@
 /**
- * Copyright 2018 Nikita Koksharov
+ * Copyright (c) 2013-2020 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,11 @@
  */
 package org.redisson.api;
 
-import java.util.List;
-
-import org.reactivestreams.Publisher;
 import org.redisson.api.RScript.Mode;
 import org.redisson.api.RScript.ReturnType;
-import org.redisson.client.codec.Codec;
+import reactor.core.publisher.Mono;
+
+import java.util.List;
 
 /**
  * Reactive interface for Redis Script feature
@@ -35,7 +34,7 @@ public interface RScriptReactive {
      * 
      * @return void
      */
-    Publisher<Void> scriptFlush();
+    Mono<Void> scriptFlush();
 
     /**
      * Executes Lua script stored in Redis scripts cache by SHA-1 digest
@@ -48,7 +47,7 @@ public interface RScriptReactive {
      * @param values - values available through VALUES param in script
      * @return result object
      */
-    <R> Publisher<R> evalSha(Mode mode, String shaDigest, ReturnType returnType, List<Object> keys, Object... values);
+    <R> Mono<R> evalSha(Mode mode, String shaDigest, ReturnType returnType, List<Object> keys, Object... values);
 
     /**
      * Executes Lua script stored in Redis scripts cache by SHA-1 digest
@@ -62,7 +61,7 @@ public interface RScriptReactive {
      * @param values - values available through VALUES param in script
      * @return result object
      */
-    <R> Publisher<R> evalSha(String key, Mode mode, String shaDigest, ReturnType returnType, List<Object> keys, Object... values);
+    <R> Mono<R> evalSha(String key, Mode mode, String shaDigest, ReturnType returnType, List<Object> keys, Object... values);
     
     /**
      * Executes Lua script stored in Redis scripts cache by SHA-1 digest
@@ -73,7 +72,7 @@ public interface RScriptReactive {
      * @param returnType - return type
      * @return result object
      */
-    <R> Publisher<R> evalSha(Mode mode, String shaDigest, ReturnType returnType);
+    <R> Mono<R> evalSha(Mode mode, String shaDigest, ReturnType returnType);
 
     /**
      * Executes Lua script
@@ -86,7 +85,7 @@ public interface RScriptReactive {
      * @param values - values available through VALUES param in script
      * @return result object
      */
-    <R> Publisher<R> eval(Mode mode, String luaScript, ReturnType returnType, List<Object> keys, Object... values);
+    <R> Mono<R> eval(Mode mode, String luaScript, ReturnType returnType, List<Object> keys, Object... values);
 
     /**
      * Executes Lua script
@@ -97,7 +96,7 @@ public interface RScriptReactive {
      * @param returnType - return type
      * @return result object
      */
-    <R> Publisher<R> eval(Mode mode, String luaScript, ReturnType returnType);
+    <R> Mono<R> eval(Mode mode, String luaScript, ReturnType returnType);
     
     /**
      * Executes Lua script
@@ -111,7 +110,7 @@ public interface RScriptReactive {
      * @param values - values available through VALUES param in script
      * @return result object
      */
-    <R> Publisher<R> eval(String key, Mode mode, String luaScript, ReturnType returnType, List<Object> keys, Object... values);
+    <R> Mono<R> eval(String key, Mode mode, String luaScript, ReturnType returnType, List<Object> keys, Object... values);
 
     /**
      * Loads Lua script into Redis scripts cache and returns its SHA-1 digest
@@ -119,7 +118,7 @@ public interface RScriptReactive {
      * @param luaScript - lua script
      * @return SHA-1 digest
      */
-    Publisher<String> scriptLoad(String luaScript);
+    Mono<String> scriptLoad(String luaScript);
 
     /**
      * Checks for presence Lua scripts in Redis script cache by SHA-1 digest.
@@ -127,37 +126,13 @@ public interface RScriptReactive {
      * @param shaDigests - collection of SHA-1 digests
      * @return list of booleans corresponding to collection SHA-1 digests
      */
-    Publisher<List<Boolean>> scriptExists(String ... shaDigests);
+    Mono<List<Boolean>> scriptExists(String... shaDigests);
 
     /**
      * Kills currently executed Lua script
      * 
      * @return void
      */
-    Publisher<Void> scriptKill();
-    
-    /*
-     * Use getScript(Codec) instead
-     */
-    @Deprecated
-    <R> Publisher<R> evalSha(Mode mode, Codec codec, String shaDigest, ReturnType returnType, List<Object> keys, Object... values);
-
-    /*
-     * Use getScript(Codec) instead
-     */
-    @Deprecated
-    <R> Publisher<R> evalSha(Mode mode, Codec codec, String shaDigest, ReturnType returnType);
-
-    /*
-     * Use getScript(Codec) instead
-     */
-    @Deprecated
-    <R> Publisher<R> eval(Mode mode, Codec codec, String luaScript, ReturnType returnType, List<Object> keys, Object... values);
-
-    /*
-     * Use getScript(Codec) instead
-     */
-    @Deprecated
-    <R> Publisher<R> eval(Mode mode, Codec codec, String luaScript, ReturnType returnType);
+    Mono<Void> scriptKill();
 
 }

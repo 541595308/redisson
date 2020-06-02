@@ -1,5 +1,5 @@
 /**
- * Copyright 2018 Nikita Koksharov
+ * Copyright (c) 2013-2020 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,26 +15,6 @@
  */
 package org.redisson.spring.data.connection;
 
-import static org.redisson.client.protocol.RedisCommands.LRANGE;
-
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.ListIterator;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
-
 import org.redisson.Redisson;
 import org.redisson.SlotCallback;
 import org.redisson.api.BatchOptions;
@@ -44,25 +24,14 @@ import org.redisson.api.RFuture;
 import org.redisson.api.RedissonClient;
 import org.redisson.client.RedisClient;
 import org.redisson.client.RedisException;
-import org.redisson.client.codec.ByteArrayCodec;
-import org.redisson.client.codec.Codec;
-import org.redisson.client.codec.DoubleCodec;
-import org.redisson.client.codec.LongCodec;
-import org.redisson.client.codec.StringCodec;
+import org.redisson.client.codec.*;
 import org.redisson.client.protocol.RedisCommand;
 import org.redisson.client.protocol.RedisCommands;
 import org.redisson.client.protocol.RedisStrictCommand;
 import org.redisson.client.protocol.convertor.BooleanReplayConvertor;
 import org.redisson.client.protocol.convertor.DoubleReplayConvertor;
 import org.redisson.client.protocol.convertor.VoidReplayConvertor;
-import org.redisson.client.protocol.decoder.ListMultiDecoder;
-import org.redisson.client.protocol.decoder.ListScanResult;
-import org.redisson.client.protocol.decoder.ListScanResultReplayDecoder;
-import org.redisson.client.protocol.decoder.LongMultiDecoder;
-import org.redisson.client.protocol.decoder.MapScanResult;
-import org.redisson.client.protocol.decoder.ObjectListReplayDecoder;
-import org.redisson.client.protocol.decoder.ObjectSetReplayDecoder;
-import org.redisson.client.protocol.decoder.TimeLongObjectDecoder;
+import org.redisson.client.protocol.decoder.*;
 import org.redisson.command.CommandAsyncService;
 import org.redisson.command.CommandBatchService;
 import org.redisson.connection.MasterSlaveEntry;
@@ -71,25 +40,22 @@ import org.redisson.misc.RedissonPromise;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.data.redis.RedisSystemException;
-import org.springframework.data.redis.connection.AbstractRedisConnection;
-import org.springframework.data.redis.connection.DataType;
-import org.springframework.data.redis.connection.MessageListener;
-import org.springframework.data.redis.connection.RedisPipelineException;
-import org.springframework.data.redis.connection.RedisSubscribedConnectionException;
-import org.springframework.data.redis.connection.ReturnType;
-import org.springframework.data.redis.connection.SortParameters;
-import org.springframework.data.redis.connection.Subscription;
-import org.springframework.data.redis.core.Cursor;
-import org.springframework.data.redis.core.KeyBoundCursor;
-import org.springframework.data.redis.core.ScanCursor;
-import org.springframework.data.redis.core.ScanIteration;
-import org.springframework.data.redis.core.ScanOptions;
+import org.springframework.data.redis.connection.*;
+import org.springframework.data.redis.core.*;
 import org.springframework.data.redis.core.types.RedisClientInfo;
 import org.springframework.util.Assert;
 import org.springframework.util.ReflectionUtils;
 
-import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.FutureListener;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.math.BigDecimal;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
+
+import static org.redisson.client.protocol.RedisCommands.LRANGE;
 
 /**
  * Redisson connection
@@ -234,78 +200,9 @@ public class RedissonConnection extends AbstractRedisConnection {
         return read(key, StringCodec.INSTANCE, RedisCommands.EXISTS, key);
     }
     
-    private void checkExecution(final RPromise<Long> result, final AtomicReference<Throwable> failed,
-            final AtomicLong count, final AtomicLong executed) {
-        if (executed.decrementAndGet() == 0) {
-            if (failed.get() != null) {
-                if (count.get() > 0) {
-                    RedisException ex = new RedisException("" + count.get() + " keys has been deleted. But one or more nodes has an error", failed.get());
-                    result.tryFailure(ex);
-                } else {
-                    result.tryFailure(failed.get());
-                }
-            } else {
-                result.trySuccess(count.get());
-            }
-        }
-    }
-
-    private RFuture<Long> executeAsync(RedisStrictCommand<Long> command, byte[] ... keys) {
-        if (!executorService.getConnectionManager().isClusterMode()) {
-            return executorService.writeAsync(null, command, Arrays.asList(keys).toArray());
-        }
-
-        Map<MasterSlaveEntry, List<byte[]>> range2key = new HashMap<MasterSlaveEntry, List<byte[]>>();
-        for (byte[] key : keys) {
-            int slot = executorService.getConnectionManager().calcSlot(key);
-            MasterSlaveEntry entry = executorService.getConnectionManager().getEntry(slot);
-            List<byte[]> list = range2key.get(entry);
-            if (list == null) {
-                list = new ArrayList<byte[]>();
-                range2key.put(entry, list);
-            }
-            list.add(key);
-        }
-
-        final RPromise<Long> result = new RedissonPromise<Long>();
-        final AtomicReference<Throwable> failed = new AtomicReference<Throwable>();
-        final AtomicLong count = new AtomicLong();
-        final AtomicLong executed = new AtomicLong(range2key.size());
-        FutureListener<List<?>> listener = new FutureListener<List<?>>() {
-            @Override
-            public void operationComplete(Future<List<?>> future) throws Exception {
-                if (future.isSuccess()) {
-                    List<Long> result = (List<Long>) future.get();
-                    for (Long res : result) {
-                        if (res != null) {
-                            count.addAndGet(res);
-                        }
-                    }
-                } else {
-                    failed.set(future.cause());
-                }
-
-                checkExecution(result, failed, count, executed);
-            }
-        };
-
-        for (Entry<MasterSlaveEntry, List<byte[]>> entry : range2key.entrySet()) {
-            CommandBatchService es = new CommandBatchService(executorService.getConnectionManager());
-            for (byte[] key : entry.getValue()) {
-                es.writeAsync(entry.getKey(), null, command, key);
-            }
-
-            RFuture<List<?>> future = es.executeAsync();
-            future.addListener(listener);
-        }
-
-        return result;
-    }
-    
     @Override
     public Long del(byte[]... keys) {
-        RFuture<Long> f = executeAsync(RedisCommands.DEL, keys);
-        return sync(f);
+        return write(keys[0], LongCodec.INSTANCE, RedisCommands.DEL, Arrays.asList(keys).toArray());
     }
     
     private static final RedisStrictCommand<DataType> TYPE = new RedisStrictCommand<DataType>("TYPE", new DataTypeConvertor());
@@ -324,7 +221,7 @@ public class RedissonConnection extends AbstractRedisConnection {
         }
 
         Set<byte[]> results = new HashSet<byte[]>();
-        RFuture<Set<byte[]>> f = (RFuture<Set<byte[]>>)(Object)(executorService.readAllAsync(results, KEYS, pattern));
+        RFuture<Set<byte[]>> f = (RFuture<Set<byte[]>>)(Object)(executorService.readAllAsync(results, ByteArrayCodec.INSTANCE, KEYS, pattern));
         return sync(f);
     }
 
@@ -564,7 +461,7 @@ public class RedissonConnection extends AbstractRedisConnection {
     
     @Override
     public List<byte[]> mGet(byte[]... keys) {
-        return write(keys[0], ByteArrayCodec.INSTANCE, MGET, Arrays.asList(keys).toArray());
+        return read(keys[0], ByteArrayCodec.INSTANCE, MGET, Arrays.asList(keys).toArray());
     }
 
     @Override
@@ -1035,8 +932,9 @@ public class RedissonConnection extends AbstractRedisConnection {
         if (score instanceof Double) {
             if (Double.isInfinite((Double) score)) {
                 element.append((Double)score > 0 ? "+inf" : "-inf");
+            } else {
+                element.append(BigDecimal.valueOf((Double)score).toPlainString());
             }
-            element.append(BigDecimal.valueOf((Double)score).toPlainString());
         } else {
             element.append(score);
         }
@@ -1099,7 +997,7 @@ public class RedissonConnection extends AbstractRedisConnection {
         return read(key, ByteArrayCodec.INSTANCE, ZREVRANGE, key, start, end);
     }
 
-    private static final RedisCommand<Set<Tuple>> ZREVRANGE_ENTRY = new RedisCommand<Set<Tuple>>("ZRANGE", new ScoredSortedSetReplayDecoder());
+    private static final RedisCommand<Set<Tuple>> ZREVRANGE_ENTRY = new RedisCommand<Set<Tuple>>("ZREVRANGE", new ScoredSortedSetReplayDecoder());
     
     @Override
     public Set<Tuple> zRevRangeWithScores(byte[] key, long start, long end) {
@@ -1274,7 +1172,7 @@ public class RedissonConnection extends AbstractRedisConnection {
         return write(destKey, StringCodec.INSTANCE, ZINTERSTORE, args.toArray());
     }
 
-    private static final RedisCommand<ListScanResult<Object>> ZSCAN = new RedisCommand<ListScanResult<Object>>("ZSCAN", new ListMultiDecoder(new LongMultiDecoder(), new ScoredSortedListReplayDecoder(), new ListScanResultReplayDecoder()));
+    private static final RedisCommand<ListScanResult<Object>> ZSCAN = new RedisCommand<>("ZSCAN", new ListMultiDecoder2(new ListScanResultReplayDecoder(), new ScoredSortedListReplayDecoder()));
     
     @Override
     public Cursor<Tuple> zScan(byte[] key, ScanOptions options) {

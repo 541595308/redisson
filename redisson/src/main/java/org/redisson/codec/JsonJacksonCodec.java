@@ -1,5 +1,5 @@
 /**
- * Copyright 2018 Nikita Koksharov
+ * Copyright (c) 2013-2020 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -77,7 +77,7 @@ public class JsonJacksonCodec extends BaseCodec {
             ByteBuf out = ByteBufAllocator.DEFAULT.buffer();
             try {
                 ByteBufOutputStream os = new ByteBufOutputStream(out);
-                mapObjectMapper.writeValue((OutputStream)os, in);
+                mapObjectMapper.writeValue((OutputStream) os, in);
                 return os.buffer();
             } catch (IOException e) {
                 out.release();
@@ -92,7 +92,7 @@ public class JsonJacksonCodec extends BaseCodec {
     private final Decoder<Object> decoder = new Decoder<Object>() {
         @Override
         public Object decode(ByteBuf buf, State state) throws IOException {
-            return mapObjectMapper.readValue((InputStream)new ByteBufInputStream(buf), Object.class);
+            return mapObjectMapper.readValue((InputStream) new ByteBufInputStream(buf), Object.class);
         }
     };
     
@@ -102,6 +102,10 @@ public class JsonJacksonCodec extends BaseCodec {
     
     public JsonJacksonCodec(ClassLoader classLoader) {
         this(createObjectMapper(classLoader, new ObjectMapper()));
+    }
+
+    public JsonJacksonCodec(ClassLoader classLoader, JsonJacksonCodec codec) {
+        this(createObjectMapper(classLoader, codec.mapObjectMapper.copy()));
     }
     
     protected static ObjectMapper createObjectMapper(ClassLoader classLoader, ObjectMapper om) {
@@ -141,21 +145,13 @@ public class JsonJacksonCodec extends BaseCodec {
                     return !t.isFinal(); // includes Object.class
                 default:
                     // case JAVA_LANG_OBJECT:
-                    return (t.getRawClass() == Object.class);
+                    return t.getRawClass() == Object.class;
                 }
             }
         };
         mapTyper.init(JsonTypeInfo.Id.CLASS, null);
         mapTyper.inclusion(JsonTypeInfo.As.PROPERTY);
         mapObjectMapper.setDefaultTyping(mapTyper);
-        
-        // warm up codec
-        try {
-            byte[] s = mapObjectMapper.writeValueAsBytes(1);
-            mapObjectMapper.readValue(s, Object.class);
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
-        }
     }
 
     protected void init(ObjectMapper objectMapper) {

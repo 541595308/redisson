@@ -1,5 +1,5 @@
 /**
- * Copyright 2018 Nikita Koksharov
+ * Copyright (c) 2013-2020 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,23 +15,19 @@
  */
 package org.redisson.connection;
 
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicLong;
-
 import org.redisson.api.NodeType;
 import org.redisson.api.RFuture;
 import org.redisson.client.RedisClient;
 import org.redisson.client.RedisConnection;
 import org.redisson.client.RedisPubSubConnection;
-import org.redisson.config.MasterSlaveServersConfig;
 import org.redisson.config.ReadMode;
 import org.redisson.pubsub.AsyncSemaphore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.FutureListener;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 
@@ -42,12 +38,12 @@ public class ClientConnectionsEntry {
 
     final Logger log = LoggerFactory.getLogger(getClass());
 
-    private final Queue<RedisPubSubConnection> allSubscribeConnections = new ConcurrentLinkedQueue<RedisPubSubConnection>();
-    private final Queue<RedisPubSubConnection> freeSubscribeConnections = new ConcurrentLinkedQueue<RedisPubSubConnection>();
+    private final Queue<RedisPubSubConnection> allSubscribeConnections = new ConcurrentLinkedQueue<>();
+    private final Queue<RedisPubSubConnection> freeSubscribeConnections = new ConcurrentLinkedQueue<>();
     private final AsyncSemaphore freeSubscribeConnectionsCounter;
 
-    private final Queue<RedisConnection> allConnections = new ConcurrentLinkedQueue<RedisConnection>();
-    private final Queue<RedisConnection> freeConnections = new ConcurrentLinkedQueue<RedisConnection>();
+    private final Queue<RedisConnection> allConnections = new ConcurrentLinkedQueue<>();
+    private final Queue<RedisConnection> freeConnections = new ConcurrentLinkedQueue<>();
     private final AsyncSemaphore freeConnectionsCounter;
 
     public enum FreezeReason {MANAGER, RECONNECT, SYSTEM}
@@ -70,13 +66,21 @@ public class ClientConnectionsEntry {
         this.freeSubscribeConnectionsCounter = new AsyncSemaphore(subscribePoolMaxSize);
 
         if (subscribePoolMaxSize > 0) {
-            connectionManager.getConnectionWatcher().add(subscribePoolMinSize, subscribePoolMaxSize, freeSubscribeConnections, freeSubscribeConnectionsCounter);
+            connectionManager.getConnectionWatcher().add(subscribePoolMinSize, subscribePoolMaxSize, freeSubscribeConnections, freeSubscribeConnectionsCounter, c -> {
+                freeSubscribeConnections.remove(c);
+                return allSubscribeConnections.remove(c);
+            });
         }
-        connectionManager.getConnectionWatcher().add(poolMinSize, poolMaxSize, freeConnections, freeConnectionsCounter);
+        connectionManager.getConnectionWatcher().add(poolMinSize, poolMaxSize, freeConnections, freeConnectionsCounter, c -> {
+                freeConnections.remove(c);
+                return allConnections.remove(c);
+            });
     }
     
     public boolean isMasterForRead() {
-        return getFreezeReason() == FreezeReason.SYSTEM && getConfig().getReadMode() == ReadMode.MASTER_SLAVE && getNodeType() == NodeType.MASTER;
+        return getFreezeReason() == FreezeReason.SYSTEM
+                        && connectionManager.getConfig().getReadMode() == ReadMode.MASTER_SLAVE
+                            && getNodeType() == NodeType.MASTER;
     }
     
     public void setNodeType(NodeType nodeType) {
@@ -158,19 +162,15 @@ public class ClientConnectionsEntry {
 
     public RFuture<RedisConnection> connect() {
         RFuture<RedisConnection> future = client.connectAsync();
-        future.addListener(new FutureListener<RedisConnection>() {
-            @Override
-            public void operationComplete(Future<RedisConnection> future) throws Exception {
-                if (!future.isSuccess()) {
-                    return;
-                }
-                
-                RedisConnection conn = future.getNow();
-                onConnect(conn);
-                log.debug("new connection created: {}", conn);
-                
-                allConnections.add(conn);
+        future.onComplete((conn, e) -> {
+            if (e != null) {
+                return;
             }
+            
+            onConnect(conn);
+            log.debug("new connection created: {}", conn);
+            
+            allConnections.add(conn);
         });
         return future;
     }
@@ -196,25 +196,18 @@ public class ClientConnectionsEntry {
         connectionManager.getConnectionEventsHub().fireConnect(conn.getRedisClient().getAddr());
     }
 
-    public MasterSlaveServersConfig getConfig() {
-        return connectionManager.getConfig();
-    }
-
     public RFuture<RedisPubSubConnection> connectPubSub() {
         RFuture<RedisPubSubConnection> future = client.connectPubSubAsync();
-        future.addListener(new FutureListener<RedisPubSubConnection>() {
-            @Override
-            public void operationComplete(Future<RedisPubSubConnection> future) throws Exception {
-                if (!future.isSuccess()) {
-                    return;
-                }
-                
-                RedisPubSubConnection conn = future.getNow();
-                onConnect(conn);
-                log.debug("new pubsub connection created: {}", conn);
-
-                allSubscribeConnections.add(conn);
+        future.onComplete((res, e) -> {
+            if (e != null) {
+                return;
             }
+            
+            RedisPubSubConnection conn = future.getNow();
+            onConnect(conn);
+            log.debug("new pubsub connection created: {}", conn);
+
+            allSubscribeConnections.add(conn);
         });
         return future;
     }

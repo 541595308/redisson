@@ -1,5 +1,5 @@
 /**
- * Copyright 2018 Nikita Koksharov
+ * Copyright (c) 2013-2020 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
  */
 package org.redisson.api;
 
-import java.util.Collection;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -158,12 +157,6 @@ public interface RKeysAsync {
      */
     RFuture<String> randomKeyAsync();
 
-    /*
-     * Use getKeysByPattern method instead
-     */
-    @Deprecated
-    RFuture<Collection<String>> findKeysByPatternAsync(String pattern);
-
     /**
      * Delete multiple objects by a key pattern.
      * <p>
@@ -185,7 +178,7 @@ public interface RKeysAsync {
      * @param objects of Redisson
      * @return number of removed keys
      */
-    RFuture<Long> deleteAsync(RObject ... objects);
+    RFuture<Long> deleteAsync(RObject... objects);
     
     /**
      * Delete multiple objects by name
@@ -193,7 +186,7 @@ public interface RKeysAsync {
      * @param keys - object names
      * @return number of removed keys
      */
-    RFuture<Long> deleteAsync(String ... keys);
+    RFuture<Long> deleteAsync(String... keys);
 
     /**
      * Delete multiple objects by name.
@@ -204,7 +197,7 @@ public interface RKeysAsync {
      * @param keys - object names
      * @return number of removed keys
      */
-    RFuture<Long> unlinkAsync(String ... keys);
+    RFuture<Long> unlinkAsync(String... keys);
     
     /**
      * Returns the number of keys in the currently-selected database in async mode
@@ -214,13 +207,24 @@ public interface RKeysAsync {
     RFuture<Long> countAsync();
 
     /**
+     * Swap two databases.
+     * <p>
+     * Requires Redis 4.0+
+     *
+     * @return void
+     */
+    RFuture<Void> swapdbAsync(int db1, int db2);
+
+    /**
      * Delete all keys of currently selected database
+     *
      * @return void
      */
     RFuture<Void> flushdbAsync();
 
     /**
      * Delete all keys of all existing databases
+     *
      * @return void
      */
     RFuture<Void> flushallAsync();

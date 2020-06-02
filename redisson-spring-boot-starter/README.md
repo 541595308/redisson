@@ -1,48 +1,42 @@
-Spring Boot Starter
-===
+# Spring Boot Starter
 
 Integrates Redisson with Spring Boot library. Depends on [Spring Data Redis](https://github.com/redisson/redisson/tree/master/redisson-spring-data#spring-data-redis-integration) module.
 
-Supports Spring Boot 1.3.x, 1.4.x, 1.5.x, 2.0.x, 2.1.x
+Supports Spring Boot 1.3.x, 1.4.x, 1.5.x, 2.0.x, 2.1.x, 2.2.x
 
-<sub>Please consider __[Redisson PRO](https://redisson.pro)__ version for advanced features and support by SLA.</sub>
+<sub>Consider __[Redisson PRO](https://redisson.pro)__ version for advanced features and support by SLA.</sub>
 
-Usage
-===
+## Usage
 
-### 1.  Add `redisson-spring-boot-starter` dependency into your project:
+### 1. Add `redisson-spring-boot-starter` dependency into your project:
 
-1. __For JDK 1.8+__  
+Maven
 
-     Maven
-     ```xml
+```xml
      <dependency>
          <groupId>org.redisson</groupId>
          <artifactId>redisson-spring-boot-starter</artifactId>
-         <version>3.9.1</version>
+         <version>3.13.0</version>
      </dependency>
-     ```
-     Gradle
+```
 
-     ```java
-     compile 'org.redisson:redisson-spring-boot-starter:3.9.1'
-     ```  
+Gradle
 
-2. __For JDK 1.6+__  
+```groovy
+     compile 'org.redisson:redisson-spring-boot-starter:3.13.0'
+```
 
-     Maven
-     ```xml
-     <dependency>
-         <groupId>org.redisson</groupId>
-         <artifactId>redisson-spring-boot-starter</artifactId>
-         <version>2.14.1</version>
-     </dependency>
-     ```
-     Gradle
 
-     ```java
-     compile 'org.redisson:redisson-spring-boot-starter:2.14.1'
-     ```  
+Downgrade `redisson-spring-data` module if necessary to support required Spring Boot version:
+
+|redisson-spring-data<br/>module name|Spring Boot<br/>version|
+|----------------------------|-------------------|
+|redisson-spring-data-16     |1.3.x              |
+|redisson-spring-data-17     |1.4.x              |
+|redisson-spring-data-18     |1.5.x              |
+|redisson-spring-data-20     |2.0.x              |
+|redisson-spring-data-21     |2.1.x              |
+|redisson-spring-data-22     |2.2.x              |
 
 ### 2. Add settings into `application.settings` file
 
@@ -63,9 +57,9 @@ spring.redis.sentinel.nodes=
 
 # Redisson settings
 
-#path to redisson.yaml or redisson.json
+#path to config - redisson.yaml
 spring.redis.redisson.config=classpath:redisson.yaml
 ```
 
-### 3. Get access to Redisson through spring bean with `RedissonClient` interface
+### 3. Use Redisson through spring bean with `RedissonClient` interface or `RedisTemplate`/`ReactiveRedisTemplate` objects
 

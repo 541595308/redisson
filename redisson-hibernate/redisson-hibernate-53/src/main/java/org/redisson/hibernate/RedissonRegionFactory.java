@@ -1,5 +1,5 @@
 /**
- * Copyright 2018 Nikita Koksharov
+ * Copyright (c) 2013-2020 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,22 +15,19 @@
  */
 package org.redisson.hibernate;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Arrays;
-import java.util.Map;
-
+import org.hibernate.boot.registry.selector.spi.StrategySelector;
 import org.hibernate.boot.spi.SessionFactoryOptions;
 import org.hibernate.cache.CacheException;
 import org.hibernate.cache.cfg.spi.DomainDataRegionBuildingContext;
 import org.hibernate.cache.cfg.spi.DomainDataRegionConfig;
+import org.hibernate.cache.spi.CacheKeysFactory;
 import org.hibernate.cache.spi.DomainDataRegion;
 import org.hibernate.cache.spi.access.AccessType;
 import org.hibernate.cache.spi.support.DomainDataRegionImpl;
 import org.hibernate.cache.spi.support.DomainDataStorageAccess;
 import org.hibernate.cache.spi.support.RegionFactoryTemplate;
 import org.hibernate.cache.spi.support.StorageAccess;
+import org.hibernate.cfg.Environment;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
 import org.hibernate.internal.util.config.ConfigurationHelper;
 import org.redisson.Redisson;
@@ -40,7 +37,15 @@ import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.LongCodec;
 import org.redisson.config.Config;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Arrays;
+import java.util.Map;
+
 /**
+ * Hibernate Cache region factory based on Redisson. 
+ * Creates own Redisson instance during region start.
  * 
  * @author Nikita Koksharov
  *
@@ -68,12 +73,25 @@ public class RedissonRegionFactory extends RegionFactoryTemplate {
     public static final String CONFIG_PREFIX = "hibernate.cache.redisson.";
     
     public static final String REDISSON_CONFIG_PATH = CONFIG_PREFIX + "config";
-    
+
+    public static final String FALLBACK = CONFIG_PREFIX + "fallback";
+
     private RedissonClient redisson;
-    
+    private CacheKeysFactory cacheKeysFactory;
+    private boolean fallback;
+
+    @Override
+    protected CacheKeysFactory getImplicitCacheKeysFactory() {
+        return cacheKeysFactory;
+    }
+
     @Override
     protected void prepareForUse(SessionFactoryOptions settings, @SuppressWarnings("rawtypes") Map properties) throws CacheException {
         this.redisson = createRedissonClient(properties);
+        
+        StrategySelector selector = settings.getServiceRegistry().getService(StrategySelector.class);
+        cacheKeysFactory = selector.resolveDefaultableStrategy(CacheKeysFactory.class, 
+                properties.get(Environment.CACHE_KEYS_FACTORY), new RedissonCacheKeysFactory(redisson.getConfig().getCodec()));
     }
 
     protected RedissonClient createRedissonClient(Map properties) {
@@ -94,6 +112,9 @@ public class RedissonRegionFactory extends RegionFactoryTemplate {
         if (config == null) {
             throw new CacheException("Unable to locate Redisson configuration");
         }
+
+        String fallbackValue = (String) properties.getOrDefault(FALLBACK, "false");
+        fallback = Boolean.valueOf(fallbackValue);
         
         return Redisson.create(config);
     }
@@ -112,34 +133,20 @@ public class RedissonRegionFactory extends RegionFactoryTemplate {
     }
     
     private Config loadConfig(ClassLoader classLoader, String fileName) {
-        Config config = null;
-        try {
-            InputStream is = classLoader.getResourceAsStream(fileName);
-            if (is != null) {
-                try {
-                    config = Config.fromJSON(is);
-                } finally {
-                    is.close();
-                }
-            }
-        } catch (IOException e) {
-            throw new CacheException("Can't parse json config", e);
-        }
-        if (config == null) {
+        InputStream is = classLoader.getResourceAsStream(fileName);
+        if (is != null) {
             try {
-                InputStream is = classLoader.getResourceAsStream(fileName);
-                if (is != null) {
-                    try {
-                        config = Config.fromYAML(is);
-                    } finally {
-                        is.close();
-                    }
-                }
+                return Config.fromJSON(is);
             } catch (IOException e) {
-                throw new CacheException("Can't parse yaml config", e);
+                try {
+                    is = classLoader.getResourceAsStream(fileName);
+                    return Config.fromYAML(is);
+                } catch (IOException e1) {
+                    throw new CacheException("Can't parse yaml config", e1);
+                }
             }
         }
-        return config;
+        return null;
     }
 
     @Override
@@ -160,16 +167,23 @@ public class RedissonRegionFactory extends RegionFactoryTemplate {
     @Override
     public long nextTimestamp() {
         long time = System.currentTimeMillis() << 12;
-        return redisson.getScript(LongCodec.INSTANCE).eval(RScript.Mode.READ_WRITE,
-                  "local currentTime = redis.call('get', KEYS[1]);"
-                + "if currentTime == false then "
-                    + "redis.call('set', KEYS[1], ARGV[1]); "
-                    + "return ARGV[1]; "
-                + "end;"
-                + "local nextValue = math.max(tonumber(ARGV[1]), tonumber(currentTime) + 1); "
-                + "redis.call('set', KEYS[1], nextValue); "
-                + "return nextValue;",
-                RScript.ReturnType.INTEGER, Arrays.<Object>asList("redisson-hibernate-timestamp"), time);
+        try {
+            return redisson.getScript(LongCodec.INSTANCE).eval(RScript.Mode.READ_WRITE,
+                    "local currentTime = redis.call('get', KEYS[1]);"
+                            + "if currentTime == false then "
+                            + "redis.call('set', KEYS[1], ARGV[1]); "
+                            + "return ARGV[1]; "
+                            + "end;"
+                            + "local nextValue = math.max(tonumber(ARGV[1]), tonumber(currentTime) + 1); "
+                            + "redis.call('set', KEYS[1], nextValue); "
+                            + "return nextValue;",
+                    RScript.ReturnType.INTEGER, Arrays.<Object>asList("redisson-hibernate-timestamp"), time);
+        } catch (Exception e) {
+            if (fallback) {
+                return super.nextTimestamp();
+            }
+            throw e;
+        }
     }
 
     @Override
@@ -185,7 +199,7 @@ public class RedissonRegionFactory extends RegionFactoryTemplate {
                 buildingContext
         );
     }
-    
+
     @Override
     protected DomainDataStorageAccess createDomainDataStorageAccess(DomainDataRegionConfig regionConfig,
             DomainDataRegionBuildingContext buildingContext) {

@@ -1,5 +1,5 @@
 /**
- * Copyright 2018 Nikita Koksharov
+ * Copyright (c) 2013-2020 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -88,6 +88,16 @@ public interface RBucket<V> extends RExpirable, RBucketAsync<V> {
     V getAndSet(V newValue);
 
     /**
+     * Retrieves current element in the holder and replaces it with <code>newValue</code> with defined <code>timeToLive</code> interval. 
+     * 
+     * @param value - value to set
+     * @param timeToLive - time to live interval
+     * @param timeUnit - unit of time to live interval
+     * @return previous value
+     */
+    V getAndSet(V value, long timeToLive, TimeUnit timeUnit);
+    
+    /**
      * Stores element into the holder. 
      * 
      * @param value - value to set
@@ -102,5 +112,17 @@ public interface RBucket<V> extends RExpirable, RBucketAsync<V> {
      * @param timeUnit - unit of time to live interval
      */
     void set(V value, long timeToLive, TimeUnit timeUnit);
+
+    /**
+     * Adds object event listener
+     *
+     * @see org.redisson.api.ExpiredObjectListener
+     * @see org.redisson.api.DeletedObjectListener
+     * @see org.redisson.api.listener.SetObjectListener
+     *
+     * @param listener - object event listener
+     * @return listener id
+     */
+    int addListener(ObjectListener listener);
 
 }

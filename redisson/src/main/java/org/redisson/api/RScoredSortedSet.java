@@ -1,5 +1,5 @@
 /**
- * Copyright 2018 Nikita Koksharov
+ * Copyright (c) 2013-2020 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,19 +20,22 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import org.redisson.api.mapreduce.RCollectionMapReduce;
 import org.redisson.client.protocol.ScoredEntry;
 
 /**
+ * Set containing elements sorted by score.
  * 
  * @author Nikita Koksharov
  *
- * @param <V> value
+ * @param <V> object type
  */
 public interface RScoredSortedSet<V> extends RScoredSortedSetAsync<V>, Iterable<V>, RExpirable, RSortable<Set<V>> {
 
-    public enum Aggregate {
+    enum Aggregate {
         
         SUM, MAX, MIN
         
@@ -61,7 +64,7 @@ public interface RScoredSortedSet<V> extends RScoredSortedSetAsync<V>, Iterable<
      *        {@code timeout} parameter
      * @return the tail element, or {@code null} if all sorted sets are empty 
      */
-    V pollLastFromAny(long timeout, TimeUnit unit, String ... queueNames);
+    V pollLastFromAny(long timeout, TimeUnit unit, String... queueNames);
     
     /**
      * Removes and returns first available head element of <b>any</b> sorted set,
@@ -77,7 +80,7 @@ public interface RScoredSortedSet<V> extends RScoredSortedSetAsync<V>, Iterable<
      *        {@code timeout} parameter
      * @return the head element, or {@code null} if all sorted sets are empty 
      */
-    V pollFirstFromAny(long timeout, TimeUnit unit, String ... queueNames);
+    V pollFirstFromAny(long timeout, TimeUnit unit, String... queueNames);
 
     /**
      * Removes and returns the head element waiting if necessary for an element to become available.
@@ -92,7 +95,32 @@ public interface RScoredSortedSet<V> extends RScoredSortedSetAsync<V>, Iterable<
      * @return the tail element
      */
     V takeLast();
-    
+
+    /**
+     * Subscribes on first elements appeared in this set.
+     * Continuously invokes {@link #takeFirstAsync()} method to get a new element.
+     *
+     * @param consumer - queue elements listener
+     * @return listenerId - id of listener
+     */
+    int subscribeOnFirstElements(Consumer<V> consumer);
+
+    /**
+     * Subscribes on last elements appeared in this set.
+     * Continuously invokes {@link #takeLastAsync()} method to get a new element.
+     *
+     * @param consumer - queue elements listener
+     * @return listenerId - id of listener
+     */
+    int subscribeOnLastElements(Consumer<V> consumer);
+
+    /**
+     * Un-subscribes defined listener.
+     *
+     * @param listenerId - id of listener
+     */
+    void unsubscribe(int listenerId);
+
     /**
      * Removes and returns the head element or {@code null} if this sorted set is empty.
      *
@@ -117,19 +145,18 @@ public interface RScoredSortedSet<V> extends RScoredSortedSetAsync<V>, Iterable<
     V pollLast(long timeout, TimeUnit unit);
     
     /**
-     * Removes and returns the head elements or {@code null} if this sorted set is empty.
+     * Removes and returns the head elements of this sorted set.
      *
      * @param count - elements amount
-     * @return the head element, 
-     *         or {@code null} if this sorted set is empty
+     * @return the head elements of this sorted set
      */
     Collection<V> pollFirst(int count);
 
     /**
-     * Removes and returns the tail elements or {@code null} if this sorted set is empty.
+     * Removes and returns the tail elements of this sorted set.
      * 
      * @param count - elements amount
-     * @return the tail element or {@code null} if this sorted set is empty
+     * @return the tail elements of this sorted set
      */
     Collection<V> pollLast(int count);
     
@@ -288,6 +315,43 @@ public interface RScoredSortedSet<V> extends RScoredSortedSetAsync<V>, Iterable<
     boolean isEmpty();
     
     /**
+     * Returns stream of elements in this set.
+     * Elements are loaded in batch. Batch size is 10. 
+     * 
+     * @return stream of elements
+     */
+    Stream<V> stream();
+    
+    /**
+     * Returns stream of elements in this set.
+     * If <code>pattern</code> is not null then only elements match this pattern are loaded.
+     * 
+     * @param pattern - search pattern
+     * @return stream of elements
+     */
+    Stream<V> stream(String pattern);
+    
+    /**
+     * Returns stream of elements in this set.
+     * Elements are loaded in batch. Batch size is defined by <code>count</code> param. 
+     * 
+     * @param count - size of elements batch
+     * @return stream of elements
+     */
+    Stream<V> stream(int count);
+    
+    /**
+     * Returns stream of elements in this set.
+     * Elements are loaded in batch. Batch size is defined by <code>count</code> param.
+     * If pattern is not null then only elements match this pattern are loaded.
+     * 
+     * @param pattern - search pattern
+     * @param count - size of elements batch
+     * @return stream of elements
+     */
+    Stream<V> stream(String pattern, int count);
+    
+    /**
      * Returns an iterator over elements in this set.
      * If <code>pattern</code> is not null then only elements match this pattern are loaded.
      * 
@@ -335,6 +399,7 @@ public interface RScoredSortedSet<V> extends RScoredSortedSetAsync<V>, Iterable<
     /**
      * Returns this sorted set in array of defined type.
      * 
+     * @param <T> type of element
      * @param a - instance of array
      * @return array of values
      */

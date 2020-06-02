@@ -1,5 +1,5 @@
 /**
- * Copyright 2018 Nikita Koksharov
+ * Copyright (c) 2013-2020 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -54,7 +54,7 @@ public class RedissonWriteLock extends RedissonLock implements RLock {
     <T> RFuture<T> tryLockInnerAsync(long leaseTime, TimeUnit unit, long threadId, RedisStrictCommand<T> command) {
         internalLockLeaseTime = unit.toMillis(leaseTime);
 
-        return commandExecutor.evalWriteAsync(getName(), LongCodec.INSTANCE, command,
+        return evalWriteAsync(getName(), LongCodec.INSTANCE, command,
                             "local mode = redis.call('hget', KEYS[1], 'mode'); " +
                             "if (mode == false) then " +
                                   "redis.call('hset', KEYS[1], 'mode', 'write'); " +
@@ -77,7 +77,7 @@ public class RedissonWriteLock extends RedissonLock implements RLock {
 
     @Override
     protected RFuture<Boolean> unlockInnerAsync(long threadId) {
-        return commandExecutor.evalWriteAsync(getName(), LongCodec.INSTANCE, RedisCommands.EVAL_BOOLEAN,
+        return evalWriteAsync(getName(), LongCodec.INSTANCE, RedisCommands.EVAL_BOOLEAN,
                 "local mode = redis.call('hget', KEYS[1], 'mode'); " +
                 "if (mode == false) then " +
                     "redis.call('publish', KEYS[2], ARGV[1]); " +
@@ -107,7 +107,7 @@ public class RedissonWriteLock extends RedissonLock implements RLock {
                 "end; "
                 + "return nil;",
         Arrays.<Object>asList(getName(), getChannelName()), 
-        LockPubSub.readUnlockMessage, internalLockLeaseTime, getLockName(threadId));
+        LockPubSub.READ_UNLOCK_MESSAGE, internalLockLeaseTime, getLockName(threadId));
     }
     
     @Override
@@ -118,14 +118,14 @@ public class RedissonWriteLock extends RedissonLock implements RLock {
     @Override
     public RFuture<Boolean> forceUnlockAsync() {
         cancelExpirationRenewal(null);
-        return commandExecutor.evalWriteAsync(getName(), LongCodec.INSTANCE, RedisCommands.EVAL_BOOLEAN,
+        return evalWriteAsync(getName(), LongCodec.INSTANCE, RedisCommands.EVAL_BOOLEAN,
               "if (redis.call('hget', KEYS[1], 'mode') == 'write') then " +
                   "redis.call('del', KEYS[1]); " +
                   "redis.call('publish', KEYS[2], ARGV[1]); " +
                   "return 1; " +
               "end; " +
               "return 0; ",
-              Arrays.<Object>asList(getName(), getChannelName()), LockPubSub.readUnlockMessage);
+              Arrays.<Object>asList(getName(), getChannelName()), LockPubSub.READ_UNLOCK_MESSAGE);
     }
 
     @Override

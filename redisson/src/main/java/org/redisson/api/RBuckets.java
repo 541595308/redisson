@@ -1,5 +1,5 @@
 /**
- * Copyright 2018 Nikita Koksharov
+ * Copyright (c) 2013-2020 Nikita Koksharov
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ public interface RBuckets extends RBucketsAsync {
      * @param keys - keys
      * @return Map with name of bucket as key and bucket as value
      */
-    <V> Map<String, V> get(String ... keys);
+    <V> Map<String, V> get(String... keys);
 
     /**
      * Try to save objects mapped by Redis key.
@@ -51,5 +51,11 @@ public interface RBuckets extends RBucketsAsync {
      * @param buckets - map of buckets
      */
     void set(Map<String, ?> buckets);
+
+    /*
+     * Use RKeys.delete method instead
+     */
+    @Deprecated
+    long delete(String... keys);
     
 }
